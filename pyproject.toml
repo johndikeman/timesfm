@@ -16,7 +16,16 @@ dependencies = [
     "numpy>=1.26.4",
     "huggingface_hub[cli]>=0.23.0",
     "safetensors>=0.5.3",
+    "torch>=2.0.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
 
 [project.optional-dependencies]
 torch = [
