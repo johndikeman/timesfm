@@ -288,11 +288,15 @@
             };
 
             shellHook = ''
-              # Undo dependency propagation by nixpkgs.
-              unset PYTHONPATH
+                                          # Undo dependency propagation by nixpkgs.
+                                          unset PYTHONPATH
 
-              # Get repository root using git. This is expanded at runtime by the editable `.pth` machinery.
-              export REPO_ROOT=$(git rev-parse --show-toplevel)
+                                          # Get repository root using git. This is expanded at runtime by the editable `.pth` machinery.
+                                          export REPO_ROOT=$(git rev-parse --show-toplevel)
+
+                            							exec fish --command="function fish_prompt 
+              															echo (set_color yellow)$PWD timesfm 
+              														end"
             '';
           };
       };
