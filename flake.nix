@@ -34,6 +34,9 @@
     }:
     let
       inherit (nixpkgs) lib;
+      config.allowUnfree = true;
+      config.cudaSupport = true;
+      config.cudaVersion = "12";
 
       # Load a uv workspace from a workspace root.
       # Uv2nix treats all uv projects as workspace projects.
@@ -151,9 +154,19 @@
             editablePythonSet = pythonSet.overrideScope (
               lib.composeManyExtensions [
                 editableOverlay
-
                 # Apply fixups for building an editable package of your workspace packages
                 (final: prev: {
+                  "nvidia-cufile-cu12" = prev."nvidia-cufile-cu12".overrideAttrs (old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.rdma-core ];
+                  });
+
+                  "nvidia-nvshmem-cu12" = prev."nvidia-nvshmem-cu12".overrideAttrs (old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [
+                      pkgs.rdma-core
+                      pkgs.libGL
+                      pkgs.libGLU
+                    ];
+                  });
                   timesfm = prev.timesfm.overrideAttrs (old: {
                     # It's a good idea to filter the sources going into an editable build
                     # so the editable package doesn't have to be rebuilt on every change.
@@ -194,6 +207,24 @@
               pkgs.uv
               pkgs.fmt.dev
               pkgs.cudaPackages.cuda_cudart
+              pkgs.ffmpeg
+              pkgs.fmt.dev
+              pkgs.cudatoolkit
+              pkgs.linuxPackages.nvidia_x11
+              pkgs.cudaPackages.cudnn
+              pkgs.libGLU
+              pkgs.libGL
+              pkgs.xorg.libXi
+              pkgs.xorg.libXmu
+              pkgs.freeglut
+              pkgs.xorg.libXext
+              pkgs.xorg.libX11
+              pkgs.xorg.libXv
+              pkgs.xorg.libXrandr
+              pkgs.zlib
+              pkgs.ncurses5
+              pkgs.stdenv.cc
+              pkgs.binutils
             ];
 
             env = {
