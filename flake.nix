@@ -165,6 +165,9 @@
                       pkgs.rdma-core
                       pkgs.libGL
                       pkgs.libGLU
+                      pkgs.pmix
+                      pkgs.libfabric
+                      pkgs.mpi
                     ];
                   });
                   timesfm = prev.timesfm.overrideAttrs (old: {
