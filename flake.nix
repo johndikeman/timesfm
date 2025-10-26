@@ -229,6 +229,25 @@
                   });
 
                 })
+                (final: prev: {
+                  # do a separate overlay function so we can rely on the output of the first one?
+                  "torch" = prev."torch".overrideAttrs (old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [
+                      pkgs.rdma-core
+                      pkgs.cudaPackages.cuda_cudart
+                      pkgs.cudatoolkit
+                      pkgs.linuxPackages.nvidia_x11
+                      pkgs.libGL
+                      pkgs.libGLU
+                      pkgs.pmix
+                      pkgs.libfabric
+                      pkgs.mpi
+                      pkgs.cudaPackages.cudnn
+                      final."nvidia-cufile-cu12"
+                      final."nvidia-cusparse-cu12"
+                    ];
+                  });
+                })
               ]
             );
 
