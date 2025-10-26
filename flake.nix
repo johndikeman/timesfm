@@ -160,6 +160,22 @@
                     buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.rdma-core ];
                   });
 
+                  "nvidia-cusolver-cu12" = prev."nvidia-cusolver-cu12".overrideAttrs (old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [
+                      pkgs.cudaPackages.cuda_cudart
+                      pkgs.cudatoolkit
+                      pkgs.linuxPackages.nvidia_x11
+                    ];
+                  });
+
+                  "nvidia-cusparse-cu12" = prev."nvidia-cusparse-cu12".overrideAttrs (old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [
+                      pkgs.cudaPackages.cuda_cudart
+                      pkgs.cudatoolkit
+                      pkgs.linuxPackages.nvidia_x11
+                    ];
+                  });
+
                   "nvidia-nvshmem-cu12" = prev."nvidia-nvshmem-cu12".overrideAttrs (old: {
                     buildInputs = (old.buildInputs or [ ]) ++ [
                       pkgs.rdma-core
@@ -170,6 +186,24 @@
                       pkgs.mpi
                     ];
                   });
+
+                  "torch" = prev."torch".overrideAttrs (old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [
+                      pkgs.rdma-core
+                      pkgs.cudaPackages.cuda_cudart
+                      pkgs.cudatoolkit
+                      pkgs.linuxPackages.nvidia_x11
+                      pkgs.libGL
+                      pkgs.libGLU
+                      pkgs.pmix
+                      pkgs.libfabric
+                      pkgs.mpi
+                      pkgs.cudaPackages.cudnn
+                      final."nvidia-cufile-cu12"
+                      final."nvidia-cusparse-cu12"
+                    ];
+                  });
+
                   timesfm = prev.timesfm.overrideAttrs (old: {
                     # It's a good idea to filter the sources going into an editable build
                     # so the editable package doesn't have to be rebuilt on every change.
