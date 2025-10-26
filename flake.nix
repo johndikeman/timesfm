@@ -192,6 +192,8 @@
             packages = [
               virtualenv
               pkgs.uv
+              pkgs.fmt.dev
+              pkgs.cudaPackages.cuda_cudart
             ];
 
             env = {
