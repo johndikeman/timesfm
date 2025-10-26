@@ -26,5 +26,5 @@ point_forecast, quantile_forecast = model.forecast(
         np.sin(np.linspace(0, 20, 67)),
     ],  # Two dummy inputs
 )
-point_forecast.shape  # (2, 12)
-quantile_forecast.shape  # (2, 12, 10): mean, then 10th to 90th quantiles.
+print(point_forecast.shape)
+print(quantile_forecast.shape)  # (2, 12, 10): mean, then 10th to 90th quantiles.
