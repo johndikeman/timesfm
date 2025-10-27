@@ -29,7 +29,7 @@ app = FastAPI(title="TimesFM inference API")
 
 class PredictionRequest(BaseModel):
     data: List[List[float]]  # 2D array as nested lists
-    horizon: Int
+    horizon: int
 
 
 class PredictionResponse(BaseModel):
