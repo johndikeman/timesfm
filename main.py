@@ -1,4 +1,5 @@
 import torch
+from contextlib import asynccontextmanager
 import numpy as np
 import timesfm
 from fastapi import FastAPI, HTTPException
@@ -6,25 +7,10 @@ from pydantic import BaseModel
 from typing import List
 import uvicorn
 
-torch.set_float32_matmul_precision("high")
-
-model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
-    "google/timesfm-2.5-200m-pytorch"
-)
-
-model.compile(
-    timesfm.ForecastConfig(
-        max_context=1024,
-        max_horizon=256,
-        normalize_inputs=True,
-        use_continuous_quantile_head=True,
-        force_flip_invariance=True,
-        infer_is_positive=True,
-        fix_quantile_crossing=True,
-    )
-)
 
 app = FastAPI(title="TimesFM inference API")
+
+model = None
 
 
 class PredictionRequest(BaseModel):
@@ -50,12 +36,37 @@ def predict(candle_window: np.ndarray, horizon) -> np.ndarray:
     np.ndarray
         Predictions array
     """
+    if not model:
+        raise Exception("model not loaded yet!")
 
-    point_forecast, quantile_forecast = model.forecast(
+    point_forecast, quantile_forecast = model.forecast(  # type: ignore
         horizon=horizon, inputs=candle_window
     )
 
-    return point_forecast
+    return quantile_forecast
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    torch.set_float32_matmul_precision("high")
+
+    model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
+        "google/timesfm-2.5-200m-pytorch"
+    )
+
+    model.compile(
+        timesfm.ForecastConfig(
+            max_context=1024,
+            max_horizon=256,
+            normalize_inputs=True,
+            use_continuous_quantile_head=True,
+            force_flip_invariance=True,
+            infer_is_positive=True,
+            fix_quantile_crossing=True,
+        )
+    )
+
+    yield
 
 
 @app.post("/predict", response_model=PredictionResponse)
