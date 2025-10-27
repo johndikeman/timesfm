@@ -8,53 +8,22 @@ from typing import List
 import uvicorn
 
 
-app = FastAPI(title="TimesFM inference API")
+model = {}
 
-model = None
+import logging
 
-
-class PredictionRequest(BaseModel):
-    data: List[List[float]]  # 2D array as nested lists
-    horizon: int
-
-
-class PredictionResponse(BaseModel):
-    predictions: List[float]
-
-
-def predict(candle_window: np.ndarray, horizon) -> np.ndarray:
-    """
-    Your model prediction logic here.
-
-    Parameters:
-    -----------
-    candle_window : np.ndarray
-        Shape: (window_size, 5) where columns are [open, high, low, close, volume]
-
-    Returns:
-    --------
-    np.ndarray
-        Predictions array
-    """
-    if not model:
-        raise Exception("model not loaded yet!")
-
-    point_forecast, quantile_forecast = model.forecast(  # type: ignore
-        horizon=horizon, inputs=candle_window
-    )
-
-    return quantile_forecast
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     torch.set_float32_matmul_precision("high")
 
-    model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
+    model["timesfm"] = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
         "google/timesfm-2.5-200m-pytorch"
     )
 
-    model.compile(
+    model["timesfm"].compile(
         timesfm.ForecastConfig(
             max_context=1024,
             max_horizon=256,
@@ -67,6 +36,45 @@ async def lifespan(app: FastAPI):
     )
 
     yield
+
+
+app = FastAPI(title="TimesFM inference API", lifespan=lifespan)
+
+
+class PredictionRequest(BaseModel):
+    data: List[List[float]]  # 2D array as nested lists
+    horizon: int
+
+
+class PredictionResponse(BaseModel):
+    predictions: List[List[List[float]]]
+
+
+def predict(candle_window: np.ndarray, horizon) -> np.ndarray:
+    """
+    Your model prediction logic here.
+
+    Parameters:
+    -----------
+    candle_window : np.ndarray
+        Shape: (5, window_size) where columns are [open, high, low, close, volume]
+
+    Returns:
+    --------
+    np.ndarray
+        Predictions array
+    """
+    model_obj = model.get("timesfm", None)
+    if not model_obj:
+        raise Exception("model not loaded yet!")
+
+    point_forecast, quantile_forecast = model_obj.forecast(  # type: ignore
+        horizon=horizon, inputs=candle_window
+    )
+    print("quantile_forecast:")
+    print(quantile_forecast)
+
+    return quantile_forecast
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -86,7 +94,7 @@ async def predict_endpoint(request: PredictionRequest):
                 status_code=400, detail=f"Expected 2D array, got {data.ndim}D"
             )
 
-        if data.shape[1] != 5:
+        if data.shape[0] != 5:
             raise HTTPException(
                 status_code=400,
                 detail=f"Expected 5 features (OHLCV), got {data.shape[1]}",
@@ -98,6 +106,7 @@ async def predict_endpoint(request: PredictionRequest):
         return PredictionResponse(predictions=predictions.tolist())
 
     except Exception as e:
+        logger.error(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
