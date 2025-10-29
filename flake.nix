@@ -274,6 +274,7 @@
               pkgs.ncurses5
               pkgs.stdenv.cc
               pkgs.binutils
+              pkgs.redis
             ];
 
             env = {
@@ -293,6 +294,7 @@
 
               # Get repository root using git. This is expanded at runtime by the editable `.pth` machinery.
               export REPO_ROOT=$(git rev-parse --show-toplevel)
+              alias redis-start='redis-server redis.conf &'
             '';
           };
       };

@@ -1,5 +1,6 @@
 import torch
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 import numpy as np
 import timesfm
 from fastapi import FastAPI, HTTPException
@@ -7,6 +8,10 @@ from pydantic import BaseModel
 from typing import List
 import uvicorn
 
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.coder import PickleCoder
+from redis import asyncio as aioredis
 
 model = {}
 
@@ -16,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     torch.set_float32_matmul_precision("high")
 
     model["timesfm"] = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
@@ -35,6 +40,20 @@ async def lifespan(app: FastAPI):
         )
     )
 
+    logger.info("Initializing Redis cache...")
+    try:
+        redis = aioredis.from_url("redis://localhost")
+        await redis.ping()  # Test connection
+        logger.info("Redis connection successful")
+
+        FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
+        logger.info("FastAPICache initialized")
+        logger.info(f"Cache backend: {FastAPICache.get_backend()}")
+        logger.info(f"Cache prefix: {FastAPICache.get_prefix()}")
+    except Exception as e:
+        logger.error(f"Failed to initialize cache: {e}")
+        raise
+
     yield
 
 
@@ -44,6 +63,15 @@ app = FastAPI(title="TimesFM inference API", lifespan=lifespan)
 class PredictionRequest(BaseModel):
     data: List[List[float]]  # 2D array as nested lists
     horizon: int
+
+    class Config:
+        # This makes the model hashable for caching
+        frozen = True
+
+    def __hash__(self):
+        # Convert data to tuple of tuples for hashing
+        data_tuple = tuple(tuple(row) for row in self.data)
+        return hash((data_tuple, self.horizon))
 
 
 class PredictionResponse(BaseModel):
@@ -75,14 +103,31 @@ def predict(candle_window: np.ndarray, horizon) -> np.ndarray:
 
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict_endpoint(request: PredictionRequest):
+async def predict_endpoint(request: PredictionRequest) -> PredictionResponse:
     """
     Endpoint to receive candle data and return predictions.
     """
+    logger.info(f"Processing prediction request for horizon={request.horizon}")
+
+    # Generate cache key from request data
+    cache_key = (
+        f"predict:{hash((tuple(tuple(row) for row in request.data), request.horizon))}"
+    )
+    logger.debug(f"Cache key: {cache_key}")
+
+    # Try to get from cache
+    backend = FastAPICache.get_backend()
+    cached = await backend.get(cache_key)
+
+    if cached:
+        logger.info("Cache HIT - returning cached prediction")
+        return PickleCoder.decode(cached)
+
+    logger.info("Cache MISS - generating new prediction")
+
     try:
         # Convert nested list to numpy array
         data = np.array(request.data)
-
         horizon = request.horizon
 
         # Validate input shape
@@ -94,16 +139,21 @@ async def predict_endpoint(request: PredictionRequest):
         if data.shape[0] != 5:
             raise HTTPException(
                 status_code=400,
-                detail=f"Expected 5 features (OHLCV), got {data.shape[1]}",
+                detail=f"Expected 5 features (OHLCV), got {data.shape[0]}",
             )
 
         # Make prediction
         predictions = predict(data, horizon)
 
-        return PredictionResponse(predictions=predictions.tolist())
+        response = PredictionResponse(predictions=predictions.tolist())
+
+        # Store in cache (60 second expiry)
+        await backend.set(cache_key, PickleCoder.encode(response.dict()))
+
+        return response
 
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Prediction error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -127,5 +177,37 @@ async def root():
 
 
 if __name__ == "__main__":
-    # Run the server
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(levelprefix)s %(asctime)s %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+        },
+        "loggers": {
+            "fastapi_cache": {
+                "handlers": ["default"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
+            "__main__": {  # Add logger for your module
+                "handlers": ["default"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
+        },
+        "root": {"handlers": ["default"], "level": "INFO"},
+    }
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_config=log_config)
