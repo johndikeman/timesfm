@@ -57,7 +57,6 @@ def predict(candle_window: np.ndarray, horizon) -> np.ndarray:
     Parameters:
     -----------
     candle_window : np.ndarray
-        Shape: (5, window_size) where columns are [open, high, low, close, volume]
 
     Returns:
     --------
@@ -71,8 +70,6 @@ def predict(candle_window: np.ndarray, horizon) -> np.ndarray:
     point_forecast, quantile_forecast = model_obj.forecast(  # type: ignore
         horizon=horizon, inputs=candle_window
     )
-    print("quantile_forecast:")
-    print(quantile_forecast)
 
     return quantile_forecast
 
